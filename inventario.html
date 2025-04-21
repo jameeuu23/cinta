@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Inventario de Almacén</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      padding: 20px;
+    }
+    .container {
+      max-width: 900px;
+    }
+    .table th, .table td {
+      vertical-align: middle;
+    }
+  </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+<body>
+
+<div class="container">
+  <h1 class="text-center mb-4">Inventario de Almacén</h1>
+<div class="text-end mb-3">
+  <button class="btn btn-danger btn-sm" onclick="cerrarSesion()">🔒 Cerrar sesión</button>
+</div>
+
+  <!-- Formulario -->
+  <form id="inventory-form" class="mb-4">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <input type="text" class="form-control" id="nombre" placeholder="Nombre de la pieza" required>
+      </div>
+      <div class="col-md-6">
+        <input type="number" class="form-control" id="almacen" placeholder="Cantidad en Almacén" required>
+      </div>
+      <div class="col-md-6">
+        <input type="number" class="form-control" id="requerida" placeholder="Cantidad Requerida" required>
+      </div>
+      <div class="col-md-6">
+        <input type="number" class="form-control" id="usoDiario" placeholder="Cantidad de Uso Diaria" required>
+      </div>
+      <div class="col-12">
+        <textarea class="form-control" id="descripcion" placeholder="Descripción" required></textarea>
+      </div>
+      <div class="col-12">
+        <button type="submit" class="btn btn-primary w-100">Agregar al Inventario</button>
+      </div>
+    </div>
+  </form>
+
+  <!-- Botones -->
+  <div class="d-flex gap-2 mb-3">
+    <button class="btn btn-success" onclick="descargarInventario()">📥 Descargar Inventario</button>
+    <label class="btn btn-info mb-0" for="upload-file">📤 Cargar Inventario</label>
+    <input type="file" id="upload-file" class="d-none" accept=".json" onchange="cargarInventario()">
+    <button class="btn btn-secondary" onclick="generarPDF()">🖨️ Generar PDF</button>
+    <button class="btn btn-success" onclick="generarExcel()">📥 Generar Excel</button>
+
+
+  </div>
+  <div class="mb-3">
+  	<input type="text" class="form-control" id="busqueda" placeholder="🔍 Buscar por nombre..." 	oninput="filtrarInventario()">
+  </div>
+  <!-- Tabla -->
+  <div class="table-responsive">
+    <table class="table table-striped table-bordered">
+      <thead class="table-dark">
+        <tr>
+          <th>Nombre</th>
+          <th>Almacén</th>
+          <th>Requerida</th>
+          <th>Uso Diario</th>
+          <th>Descripción</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-inventario"></tbody>
+    </table>
+  </div>
+</div>
+<div class="text-end mb-2">
+  <button class="btn btn-outline-primary btn-sm" onclick="generarGrafico()">🔄 Actualizar gráfico</button>
+</div>
+
+<div class="card mt-5 shadow">
+  <div class="card-header bg-primary text-white text-center">
+    <h5 class="mb-0">📊 Cantidad en Almacén por Pieza</h5>
+  </div>
+  <div class="card-body bg-light">
+    <div class="chart-container" style="position: relative; height:400px;">
+      <canvas id="graficoBarras"></canvas>
+    </div>
+  </div>
+</div>
+<canvas id="graficoInventario" style="display: none;"></canvas>
+
+<script>
+  if (localStorage.getItem('auth') !== 'true') {
+    window.location.href = 'login.html';
+  }
+
+  let inventario = JSON.parse(localStorage.getItem('inventario')) || [];
+  let indexEditando = null;
+
+  const form = document.getElementById('inventory-form');
+  const tabla = document.getElementById('tabla-inventario');
+
+  function actualizarTabla() {
+    tabla.innerHTML = '';
+    inventario.forEach((item, index) => {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${item.nombre}</td>
+        <td>${item.almacen}</td>
+        <td>${item.requerida}</td>
+        <td>${item.usoDiario}</td>
+        <td>${item.descripcion}</td>
+        <td>
+          <button class="btn btn-warning btn-sm me-1" onclick="editarPieza(${index})">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarPieza(${index})">🗑️</button>
+        </td>
+      `;
+      tabla.appendChild(fila);
+    });
+	generarGrafico();
+  }
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const nuevaPieza = {
+      nombre: document.getElementById('nombre').value,
+      almacen: document.getElementById('almacen').value,
+      requerida: document.getElementById('requerida').value,
+      usoDiario: document.getElementById('usoDiario').value,
+      descripcion: document.getElementById('descripcion').value
+    };
+
+    if (indexEditando !== null) {
+      inventario[indexEditando] = nuevaPieza;
+      indexEditando = null;
+    } else {
+      inventario.push(nuevaPieza);
+    }
+
+    localStorage.setItem('inventario', JSON.stringify(inventario));
+    form.reset();
+    actualizarTabla();
+  });
+
+  function editarPieza(index) {
+    const pieza = inventario[index];
+    document.getElementById('nombre').value = pieza.nombre;
+    document.getElementById('almacen').value = pieza.almacen;
+    document.getElementById('requerida').value = pieza.requerida;
+    document.getElementById('usoDiario').value = pieza.usoDiario;
+    document.getElementById('descripcion').value = pieza.descripcion;
+    indexEditando = index;
+  }
+
+  function eliminarPieza(index) {
+    if (confirm('¿Eliminar esta pieza del inventario?')) {
+      inventario.splice(index, 1);
+      localStorage.setItem('inventario', JSON.stringify(inventario));
+      actualizarTabla();
+    }
+  }
+
+  function descargarInventario() {
+    const blob = new Blob([JSON.stringify(inventario, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventario.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function cargarInventario() {
+    const input = document.getElementById('upload-file');
+    const archivo = input.files[0];
+    if (!archivo) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const datos = JSON.parse(e.target.result);
+        if (Array.isArray(datos)) {
+          inventario = datos;
+          localStorage.setItem('inventario', JSON.stringify(inventario));
+          actualizarTabla();
+          alert("Inventario cargado con éxito");
+        } else {
+          alert("El archivo no es válido.");
+        }
+      } catch (err) {
+        alert("Error al leer el archivo.");
+      }
+    };
+    reader.readAsText(archivo);
+  }
+
+  actualizarTabla();
+
+function filtrarInventario() {
+  const termino = document.getElementById('busqueda').value.toLowerCase();
+  const tabla = document.getElementById('tabla-inventario');
+  tabla.innerHTML = '';
+
+  inventario.forEach((item, index) => {
+    if (item.nombre.toLowerCase().includes(termino)) {
+      const fila = document.createElement('tr');
+      fila.innerHTML = `
+        <td>${item.nombre}</td>
+        <td>${item.almacen}</td>
+        <td>${item.requerida}</td>
+        <td>${item.usoDiario}</td>
+        <td>${item.descripcion}</td>
+        <td>
+          <button class="btn btn-warning btn-sm me-1" onclick="editarPieza(${index})">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarPieza(${index})">🗑️</button>
+        </td>
+      `;
+      tabla.appendChild(fila);
+    }
+  });
+}
+
+async function generarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  const fecha = new Date().toLocaleString();
+  //const logoBase64 = "data:image/png;base64,..."; // reemplaza con tu logo
+
+  // Agregar logo
+  //doc.addImage(logoBase64, 'PNG', 14, 10, 25, 25);
+
+  // Encabezado del documento
+  doc.setFontSize(16);
+  doc.text("Resumen del Inventario", 14, 20);
+  doc.setFontSize(10);
+  doc.text(`Fecha de generación: ${fecha}`, 14, 27);
+
+  // Crear tabla con encabezados
+  const headers = [["Nombre de la Pieza", "Cantidad en Almacén", "Cantidad Requerida", "Uso Diario", "Descripción"]];
+  
+  // Crear filas desde el inventario
+  const data = inventario.map(item => [
+    item.nombre,
+    item.almacen,
+    item.requerida,
+    item.usoDiario,
+    item.descripcion
+  ]);
+
+  // Agregar tabla al PDF usando autoTable
+  doc.autoTable({
+    head: headers,
+    body: data,
+    startY: 35,
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+      valign: 'middle'
+    },
+    headStyles: {
+      fillColor: [54, 162, 235], // Azul claro
+      textColor: 255,
+      halign: 'center'
+    },
+    bodyStyles: {
+      halign: 'center'
+    },
+    columnStyles: {
+      0: { cellWidth: 50 }, // Nombre
+      1: { cellWidth: 35 }, // Almacén
+      2: { cellWidth: 40 }, // Requerida
+      3: { cellWidth: 35 }, // Uso Diario
+      4: { cellWidth: 100 } // Descripción
+    }
+  });
+
+  // Pie de firma y total
+  const finalY = doc.lastAutoTable.finalY + 10;
+  doc.setFontSize(12);
+  doc.text(`Total de piezas: ${inventario.length}`, 14, finalY);
+  doc.text("Firma: _________________________", 200, finalY);
+  doc.text("Responsable del Inventario", 200, finalY + 7);
+
+  // Guardar PDF
+  doc.save("resumen_inventario.pdf");
+}
+  
+function generarExcel() {
+  // Crear una hoja de cálculo con los datos del inventario
+  const worksheetData = [
+    ["Nombre de la Pieza", "Cantidad en Almacén", "Cantidad Requerida", "Uso Diario", "Descripción"],
+    ...inventario.map(item => [
+      item.nombre,
+      item.almacen,
+      item.requerida,
+      item.usoDiario,
+      item.descripcion
+    ])
+  ];
+
+  // Crear workbook y worksheet
+  const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Inventario");
+
+  // Descargar archivo
+  XLSX.writeFile(workbook, "inventario.xlsx");
+}
+
+function generarGrafico() {
+  const ctx = document.getElementById('graficoBarras').getContext('2d');
+  const backgroundColors = inventario.map(() => `hsl(${Math.random() * 360}, 70%, 60%)`);
+
+
+  const nombres = inventario.map(item => item.nombre);
+  const cantidades = inventario.map(item => Number(item.almacen));
+
+  // Destruir gráfico previo si existe
+  if (window.miGrafico) {
+    window.miGrafico.destroy();
+  }
+
+window.miGrafico = new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: nombres,
+    datasets: [{
+      label: 'Cantidad en Almacén',
+      data: cantidades,
+      backgroundColor: backgroundColors,
+      borderColor: '#444',
+      borderWidth: 1
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#000',
+        titleFont: { weight: 'bold' }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { stepSize: 1 }
+      }
+    }
+  }
+});
+
+}
+
+function cerrarSesion() {
+  localStorage.removeItem('auth');
+  window.location.href = 'login.html';
+}
+
+
+
+</script>
+</body>
+</html>
