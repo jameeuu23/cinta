@@ -71,7 +71,8 @@
       const errorMsg = document.getElementById('error-message');
 
       if (username === 'admin' && password === '12345') {
-        document.body.innerHTML = '<h2 style="text-align:center; color:green;">✅ Bienvenido al inventario</h2>';
+        localStorage.setItem('auth', 'true');
+        window.location.href = 'inventario.html';
       } else {
         errorMsg.textContent = 'Usuario o contraseña incorrectos';
       }
