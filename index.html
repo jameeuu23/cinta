@@ -71,7 +71,7 @@
       const errorMsg = document.getElementById('error-message');
 
       if (username === 'admin' && password === '12345') {
-        localStorage.setItem('auth', 'true');
+        // Si los datos son correctos, redirigir a inventario.html
         window.location.href = 'https://jameeuu23.github.io/cinta/inventario.html';
       } else {
         errorMsg.textContent = 'Usuario o contraseña incorrectos';
