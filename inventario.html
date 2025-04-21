@@ -104,7 +104,7 @@
 
 <script>
   if (localStorage.getItem('auth') !== 'true') {
-    window.location.href = 'index.html';
+    window.location.href = 'https://jameeuu23.github.io/cinta';
   }
 
   let inventario = JSON.parse(localStorage.getItem('inventario')) || [];
@@ -369,7 +369,7 @@ window.miGrafico = new Chart(ctx, {
 
 function cerrarSesion() {
   localStorage.removeItem('auth');
-  window.location.href = 'index.html';
+  window.location.href = 'https://jameeuu23.github.io/cinta';
 }
 
 
